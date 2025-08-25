@@ -1,9 +1,11 @@
 package com.example.webviewapp
 
+import android.annotation.SuppressLint
 import android.os.Bundle
-import android.webkit.WebSettings
+import android.webkit.WebChromeClient
 import android.webkit.WebView
-import androidx.appcompat.app.AppCompatActivity
+import android.webkit.WebViewClient
+import androidx.activity.ComponentActivity
 
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
