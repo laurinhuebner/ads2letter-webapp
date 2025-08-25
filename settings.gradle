@@ -12,5 +12,6 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "webviewapp"
+
+rootProject.name = "ads2letter"
 include(":app")
