@@ -1,4 +1,4 @@
-name: Android CI
+name: Build Android APK
 
 on:
   push:
@@ -8,26 +8,51 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
     steps:
-      - name: Checkout sources
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
+          cache: gradle
 
-      # Build without gradle wrapper
+      # Wenn dein Repo einen Gradle-Wrapper (gradlew) hat, nutzen wir ihn.
+      # Falls nicht, verwenden wir das Gradle CLI via build-action.
+      - name: Try make gradlew executable (optional)
+        run: |
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+          fi
+
       - name: Build Debug APK
-        uses: gradle/gradle-build-action@v3
-        with:
-          gradle-version: 8.7
-          build-root-directory: .
-          arguments: assembleDebug
+        id: build
+        run: |
+          set -e
+          if [ -f "./gradlew" ]; then
+            ./gradlew --no-daemon clean :app:assembleDebug
+          else
+            echo "No gradlew found -> using Gradle CLI"
+            # Setup Gradle CLI (inkl. Cache)
+            echo "org.gradle.jvmargs=-Xmx2g" >> gradle.properties
+            echo "kotlin.jvm.target=17" >> gradle.properties
+            # Offizielles Gradle-Setup + Cache
+            echo "Using Gradle CLI..."
+            curl -s https://get.sdkman.io | bash >/dev/null 2>&1 || true
+            gradle --version
+            gradle --no-daemon clean :app:assembleDebug
+          fi
+        env:
+          # Stabilere Builds in CI
+          GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.caching=true -Dorg.gradle.parallel=true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: app-debug.apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
