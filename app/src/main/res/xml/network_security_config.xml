@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
+    <!-- Nur deine LAN-IP für HTTP zulassen -->
     <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">192.168.1.21</domain>
-        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="false">192.168.1.21</domain>
     </domain-config>
 </network-security-config>
