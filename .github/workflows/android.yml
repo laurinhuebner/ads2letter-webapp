@@ -10,6 +10,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Sanitize Java env
+        run: |
+          echo "JAVA_TOOL_OPTIONS=" >> $GITHUB_ENV
+          echo "_JAVA_OPTIONS=" >> $GITHUB_ENV
+
+      - name: Verify Java env
+        run: |
+          echo "JAVA_TOOL_OPTIONS='$JAVA_TOOL_OPTIONS'"
+          echo "_JAVA_OPTIONS='$_JAVA_OPTIONS'"
+     
       - name: Checkout
         uses: actions/checkout@v4
 
