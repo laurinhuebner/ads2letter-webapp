@@ -2,8 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
 
 jobs:
@@ -11,44 +10,36 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Grant execute permission for gradlew
+      - name: Make gradlew executable
         run: chmod +x gradlew
 
-      # Problematische JVM-Optionen neutralisieren
-      - name: Sanitize Java env
+      # Verhindert das "-Xmx64m"-Problem durch geerbte JVM-Flags
+      - name: Sanitize JAVA/Gradle env
         run: |
           echo "JAVA_TOOL_OPTIONS=" >> $GITHUB_ENV
           echo "_JAVA_OPTIONS=" >> $GITHUB_ENV
           echo "GRADLE_OPTS=" >> $GITHUB_ENV
+          sed -i 's/^DEFAULT_JVM_OPTS=.*/DEFAULT_JVM_OPTS=""/' gradlew || true
+          [ -f gradlew.bat ] && sed -i 's/^set DEFAULT_JVM_OPTS=.*/set DEFAULT_JVM_OPTS=/' gradlew.bat || true
 
-      # Gradle Wrapper patchen (DEFAULT_JVM_OPTS leeren)
-      - name: Patch gradle wrapper JVM opts
-        run: |
-          if [ -f gradlew ]; then
-            sed -i 's/^DEFAULT_JVM_OPTS=.*/DEFAULT_JVM_OPTS=""/' gradlew
-            chmod +x gradlew
-          fi
-          if [ -f gradlew.bat ]; then
-            sed -i 's/^set DEFAULT_JVM_OPTS=.*/set DEFAULT_JVM_OPTS=/' gradlew.bat
-          fi
-
-      - name: Show Gradle version
+      - name: Gradle version
         run: ./gradlew -v
 
       - name: Build Debug APK
         run: ./gradlew clean :app:assembleDebug --stacktrace --info
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v3
+      - name: Upload APK (v4)
+        uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
