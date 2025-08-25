@@ -1,14 +1,12 @@
-plugins {
-    id 'com.android.application'
-    id 'org.jetbrains.kotlin.android' version '1.9.24'
-}
+apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
 
 android {
     namespace 'com.example.webviewapp'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.example.webviewapp"
+        applicationId 'com.example.webviewapp'
         minSdk 21
         targetSdk 34
         versionCode 1
@@ -25,13 +23,12 @@ android {
         }
     }
 
-    // Java & Kotlin auf dieselbe Zielversion stellen
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = "17"
+        jvmTarget = '17'
     }
 }
 
