@@ -12,7 +12,6 @@ jobs:
       JAVA_TOOL_OPTIONS: ""
       _JAVA_OPTIONS: ""
       GRADLE_OPTS: ""
-      BASE_URL: ${{ vars.BASE_URL || secrets.BASE_URL }}
 
     steps:
       - name: Checkout
@@ -22,34 +21,27 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
 
-      - name: Ensure Gradle Wrapper (if missing)
-        shell: bash
+      - name: Ensure Gradle wrapper (generate if missing)
         run: |
-          if [ ! -f ./gradlew ]; then
+          sudo apt-get update && sudo apt-get install -y unzip
+          if [ ! -f gradlew ]; then
             curl -sL https://services.gradle.org/distributions/gradle-8.7-bin.zip -o gradle.zip
             unzip -q gradle.zip
             ./gradle-8.7/bin/gradle wrapper
           fi
-          chmod +x ./gradlew
-
-      - name: Patch wrapper to remove bad JVM opts
-        shell: bash
-        run: |
+          dos2unix gradlew 2>/dev/null || true
+          chmod +x gradlew
+          # Entfernt fehlerhafte JVM-Opts wie "-Xmx64m" im Wrapper
           sed -i 's/^DEFAULT_JVM_OPTS=.*/DEFAULT_JVM_OPTS=""/' gradlew || true
 
-      - name: Project gradle.properties
-        shell: bash
+      - name: Create/override gradle.properties
         run: |
-          cat > gradle.properties <<EOF
-org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
-android.useAndroidX=true
-android.enableJetifier=true
-EOF
+          printf "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8\nandroid.useAndroidX=true\nandroid.enableJetifier=true\n" > gradle.properties
           cat gradle.properties
 
-      - name: Print Gradle version
+      - name: Show Gradle version
         run: ./gradlew --no-daemon -v
 
       - name: Build debug APK
@@ -59,7 +51,5 @@ EOF
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
-          path: |
-            app/build/outputs/apk/debug/*.apk
-            **/outputs/apk/debug/*.apk
-          if-no-files-found: warn
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
