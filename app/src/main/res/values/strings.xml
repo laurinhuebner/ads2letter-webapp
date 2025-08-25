@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Ads2Letter</string>
+    <string name="base_url">http://192.168.1.21:5000/</string>
+</resources>
