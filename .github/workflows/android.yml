@@ -19,25 +19,13 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Make gradlew executable
-        run: chmod +x gradlew
+      - name: Build with Gradle 8.7 (ohne Wrapper)
+        uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: 8.7
+          arguments: clean :app:assembleDebug --stacktrace --info
 
-      # Verhindert das "-Xmx64m"-Problem durch geerbte JVM-Flags
-      - name: Sanitize JAVA/Gradle env
-        run: |
-          echo "JAVA_TOOL_OPTIONS=" >> $GITHUB_ENV
-          echo "_JAVA_OPTIONS=" >> $GITHUB_ENV
-          echo "GRADLE_OPTS=" >> $GITHUB_ENV
-          sed -i 's/^DEFAULT_JVM_OPTS=.*/DEFAULT_JVM_OPTS=""/' gradlew || true
-          [ -f gradlew.bat ] && sed -i 's/^set DEFAULT_JVM_OPTS=.*/set DEFAULT_JVM_OPTS=/' gradlew.bat || true
-
-      - name: Gradle version
-        run: ./gradlew -v
-
-      - name: Build Debug APK
-        run: ./gradlew clean :app:assembleDebug --stacktrace --info
-
-      - name: Upload APK (v4)
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
