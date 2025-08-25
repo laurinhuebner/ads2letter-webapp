@@ -1,26 +1,35 @@
 package de.laurin.ads2letter
 
+import android.annotation.SuppressLint
 import android.os.Bundle
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import de.laurin.ads2letter.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var binding: ActivityMainBinding
-
+    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        setContentView(R.layout.activity_main)
 
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        val webView = findViewById<WebView>(R.id.webView)
+        with(webView.settings) {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            cacheMode = WebSettings.LOAD_DEFAULT
+            mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+        }
 
-        val webView: WebView = binding.webview
-        webView.settings.javaScriptEnabled = true
-        webView.webViewClient = WebViewClient()
-        webView.loadUrl("https://example.com") // <- deine URL hier
+        webView.webViewClient = WebViewClient() // hält Navigation in der App
+
+        // >>> HIER deine LAN-Adresse <<<
+        webView.loadUrl("http://192.168.1.21:5000/")
+    }
+
+    override fun onBackPressed() {
+        val wv = findViewById<WebView>(R.id.webView)
+        if (wv.canGoBack()) wv.goBack() else super.onBackPressed()
     }
 }
