@@ -19,22 +19,67 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # Falls dein Android-Projekt in ./android liegt (Standard)
-      # Wenn dein android-Verzeichnis im Repo-Root ist, lass das so.
-      # Wenn dein Projekt *im Root* liegt (ohne Ordner "android"),
-      # dann lösche "working-directory: android" unten und passe Upload-Pfade an.
-
-      - name: Build Debug APK (no wrapper)
-        working-directory: android
+      - name: Detect Android project directory
+        shell: bash
         run: |
-          # Gradle installieren und ins PATH legen
-          sudo apt-get update -y
-          sudo apt-get install -y gradle
-          gradle --version
-          # Debug-APK bauen
-          gradle assembleDebug
+          set -e
+          ANDROID_DIR=""
+          # 1) Projekt im Repo-Root?
+          if [[ -f "settings.gradle" || -f "settings.gradle.kts" || -f "gradlew" ]]; then
+            ANDROID_DIR="."
+          # 2) Klassischer Unterordner "android"?
+          elif [[ -d "android" && ( -f "android/settings.gradle" || -f "android/settings.gradle.kts" || -f "android/gradlew" ) ]]; then
+            ANDROID_DIR="android"
+          else
+            # 3) Fallback: suchen
+            FILE=$(git ls-files | egrep '(^|/)(settings\.gradle(\.kts)?|app/build\.gradle(\.kts)?)$' | head -n1 || true)
+            if [[ -n "$FILE" ]]; then
+              ANDROID_DIR="$(dirname "$FILE")"
+              # falls FILE app/build.gradle ist -> ein Verzeichnis höher (Modul)
+              if [[ "$ANDROID_DIR" =~ app$ ]]; then ANDROID_DIR="$(dirname "$ANDROID_DIR")"; fi
+            fi
+          fi
 
-      - name: Upload APK
+          if [[ -z "$ANDROID_DIR" ]]; then
+            echo "Konnte keinen Android-Ordner finden. Prüfe Repo-Struktur."
+            exit 1
+          fi
+
+          echo "Gefundener ANDROID_DIR: $ANDROID_DIR"
+          echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
+
+      - name: Build Debug APK
+        shell: bash
+        run: |
+          set -e
+          cd "$ANDROID_DIR"
+
+          if [[ -f "./gradlew" ]]; then
+            echo "Baue mit Gradle Wrapper…"
+            chmod +x ./gradlew
+            ./gradlew --no-daemon assembleDebug
+          else
+            echo "Kein Wrapper gefunden – installiere Gradle…"
+            sudo apt-get update -y
+            sudo apt-get install -y gradle
+            gradle --version
+            gradle --no-daemon assembleDebug
+          fi
+
+          # APK suchen
+          APK_PATH=$(find "$PWD" -type f -name "app-debug.apk" | head -n1 || true)
+          if [[ -z "$APK_PATH" ]]; then
+            echo "Keine app-debug.apk gefunden."
+            exit 1
+          fi
+          echo "APK_PATH=$APK_PATH" >> "$GITHUB_ENV"
+          echo "Gefundene APK: $APK_PATH"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug.apk
+          path: ${{ env.APK_PATH }}     - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug.apk
