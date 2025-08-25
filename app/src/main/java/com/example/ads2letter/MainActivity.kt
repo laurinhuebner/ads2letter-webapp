@@ -90,35 +90,29 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             val file = copyToCache(uri)
 
-            val request = Request.Builder()
-                .url(BuildConfig.BASE_URL + "/upload")
-                .post(okhttp3.RequestBody.create(
-                    okhttp3.MediaType.parse("application/pdf"),
-                    file
-                ))
-                .build()
+package com.example.webviewapp
 
-            try {
-                val response = client.newCall(request).execute()
-                val body = response.body()?.string() ?: "Fehler: Leere Antwort"
+import android.annotation.SuppressLint
+import android.os.Bundle
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AppCompatActivity
 
-                withContext(Dispatchers.Main) {
-                    resultText.text = body
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    resultText.text = "Fehler: ${e.localizedMessage}"
-                }
-            }
-        }
+class MainActivity : AppCompatActivity() {
+  @SuppressLint("SetJavaScriptEnabled")
+  override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    enableEdgeToEdge()
+    val webView = WebView(this)
+    setContentView(webView)
+
+    webView.settings.javaScriptEnabled = true
+    webView.webViewClient = object : WebViewClient() {
+      override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+        return false
+      }
     }
-
-    private fun copyToCache(uri: Uri): File {
-        val inputStream = contentResolver.openInputStream(uri)
-        val file = File(cacheDir, "temp.pdf")
-        inputStream?.use { input ->
-            file.outputStream().use { output -> input.copyTo(output) }
-        }
-        return file
-    }
+    webView.loadUrl("http://192.168.1.21:5000")
+  }
 }
