@@ -1,22 +1,18 @@
-name: Android CI
+name: Android APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
     paths:
       - 'app/**'
-      - 'gradle/**'
-      - 'gradle.properties'
-      - 'settings.gradle'
       - 'build.gradle'
+      - 'settings.gradle'
+      - 'gradle/**'
       - '.github/workflows/android.yml'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      BASE_URL: ${{ vars.BASE_URL || secrets.BASE_URL || 'http://192.168.1.21:5000' }}
 
     steps:
       - name: Checkout
@@ -27,24 +23,31 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
 
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
+      - name: Install Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Ensure Gradle properties
-        run: |
-          echo "org.gradle.jvmargs=-Xmx2g -Dkotlin.daemon.jvm.options=-Xmx2g" >> gradle.properties
-          echo "android.useAndroidX=true" >> gradle.properties
-          echo "android.enableJetifier=true" >> gradle.properties
-          echo "kotlin.compiler.jvmTarget=17" >> gradle.properties
+      - name: Accept SDK licenses
+        run: yes | sdkmanager --licenses
+
+      - name: Set up Gradle (cache)
+        uses: gradle/actions/setup-gradle@v3
+
+      # Falls dein Projekt im Repo-Root liegt (settings.gradle im Root)
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper --gradle-version 8.7
 
       - name: Build Debug APK (verbose)
-        run: ./gradle clean assembleDebug -PBASE_URL="${BASE_URL}" --stacktrace --info
+        env:
+          BASE_URL: ${{ secrets.BASE_URL }}
+        run: |
+          echo "org.gradle.jvmargs=-Xmx2g" >> gradle.properties
+          echo "android.useAndroidX=true" >> gradle.properties
+          echo "android.enableJetifier=true" >> gradle.properties
+          ./gradlew clean :app:assembleDebug --stacktrace --info -PBASE_URL="${BASE_URL}"
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
