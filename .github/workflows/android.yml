@@ -12,86 +12,48 @@ jobs:
       JAVA_TOOL_OPTIONS: ""
       _JAVA_OPTIONS: ""
       GRADLE_OPTS: ""
+      BASE_URL: ${{ vars.BASE_URL || secrets.BASE_URL }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Show suspicious lines (optional)
-        shell: bash
-        run: |
-          git grep -n --color=never '"-Xmx64m"' || true
-          git grep -n --color=never 'org\.gradle\.jvmargs=' || true
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
-      - name: Ensure Gradle Wrapper
+      - name: Ensure Gradle Wrapper (if missing)
         shell: bash
         run: |
-          set -e
           if [ ! -f ./gradlew ]; then
-            curl -sL https://services.gradle.org/distributions/gradle-8.7-bin.zip -o gradle-8.7-bin.zip
-            unzip -q gradle-8.7-bin.zip
+            curl -sL https://services.gradle.org/distributions/gradle-8.7-bin.zip -o gradle.zip
+            unzip -q gradle.zip
             ./gradle-8.7/bin/gradle wrapper
           fi
           chmod +x ./gradlew
 
-      - name: Scrub ALL gradle.properties (project + user)
+      - name: Patch wrapper to remove bad JVM opts
         shell: bash
         run: |
-          set -e
-          # Projekt-root
-          touch gradle.properties
-          # Alle project-gradle.properties finden & bereinigen
-          while IFS= read -r f; do
-            echo "Fixing $f"
-            # entferne Zeilen mit falsch zitierten Werten
-            sed -i '/org\.gradle\.jvmargs=.*"-Xmx64m"/d' "$f" || true
-            # setze korrekte Werte (ohne Anführungszeichen!)
-            if grep -q '^org\.gradle\.jvmargs=' "$f"; then
-              sed -i 's/^org\.gradle\.jvmargs=.*/org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8/' "$f"
-            else
-              echo 'org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8' >> "$f"
-            fi
-            if grep -q '^android\.useAndroidX=' "$f"; then
-              sed -i 's/^android\.useAndroidX=.*/android.useAndroidX=true/' "$f"
-            else
-              echo 'android.useAndroidX=true' >> "$f"
-            fi
-            if grep -q '^android\.enableJetifier=' "$f"; then
-              sed -i 's/^android\.enableJetifier=.*/android.enableJetifier=true/' "$f"
-            else
-              echo 'android.enableJetifier=true' >> "$f"
-            fi
-          done < <(find . -name gradle.properties)
+          sed -i 's/^DEFAULT_JVM_OPTS=.*/DEFAULT_JVM_OPTS=""/' gradlew || true
 
-          # User-Gradle (falls der Runner so etwas gesetzt hat)
-          mkdir -p ~/.gradle
-          cat > ~/.gradle/gradle.properties <<'EOF'
+      - name: Project gradle.properties
+        shell: bash
+        run: |
+          cat > gradle.properties <<EOF
 org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
 android.useAndroidX=true
 android.enableJetifier=true
 EOF
+          cat gradle.properties
 
-          echo "----- EFFECTIVE project gradle.properties -----"
-          cat gradle.properties || true
-          echo "----------------------------------------------"
-          echo "----- USER ~/.gradle/gradle.properties  ------"
-          cat ~/.gradle/gradle.properties || true
-          echo "----------------------------------------------"
-
-      - name: Prepare env (BASE_URL optional)
-        shell: bash
-        run: |
-          : "${BASE_URL:=${{ vars.BASE_URL }}}"
-          : "${BASE_URL:=${{ secrets.BASE_URL }}}"
-          echo "BASE_URL=${BASE_URL}" >> $GITHUB_ENV
+      - name: Print Gradle version
+        run: ./gradlew --no-daemon -v
 
       - name: Build debug APK
-        shell: bash
-        run: |
-          set -e
-          unset JAVA_TOOL_OPTIONS _JAVA_OPTIONS GRADLE_OPTS
-          ./gradlew --no-daemon --version
-          ./gradlew clean :app:assembleDebug -PBASE_URL="${BASE_URL}" --no-daemon --stacktrace --info
+        run: ./gradlew clean :app:assembleDebug --no-daemon --stacktrace --info
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
