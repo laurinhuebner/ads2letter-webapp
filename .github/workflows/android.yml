@@ -16,11 +16,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      JAVA_TOOL_OPTIONS: ""
-      _JAVA_OPTIONS: ""
-      GRADLE_OPTS: ""
-      BASE_URL: ${{ vars.BASE_URL != '' && vars.BASE_URL || secrets.BASE_URL }}
 
     steps:
       - name: Checkout
@@ -33,38 +28,48 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-
-      # Wrapper generieren, falls er fehlt
+      # Gradle Wrapper erzeugen, falls fehlt
       - name: Generate Gradle Wrapper if missing
         if: ${{ hashFiles('gradlew') == '' }}
         uses: gradle/gradle-build-action@v3
+        env:
+          JAVA_TOOL_OPTIONS: ""
+          _JAVA_OPTIONS: ""
+          GRADLE_OPTS: ""
         with:
           gradle-version: 8.7
           arguments: wrapper
 
-      - name: Make gradlew executable
+      - name: Make gradlew executable & print version
+        shell: bash
         run: |
-          if [ -f ./gradlew ]; then chmod +x ./gradlew; fi
+          unset JAVA_TOOL_OPTIONS _JAVA_OPTIONS
+          if [ -f ./gradlew ]; then chmod +x ./gradlew; else echo "gradlew fehlt"; fi
           ./gradlew -v
 
       - name: Ensure gradle.properties (AndroidX + RAM)
+        shell: bash
         run: |
+          unset JAVA_TOOL_OPTIONS _JAVA_OPTIONS
           {
-            echo "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8";
-            echo "android.useAndroidX=true";
-            echo "android.enableJetifier=true";
+            echo "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8"
+            echo "android.useAndroidX=true"
+            echo "android.enableJetifier=true"
           } >> gradle.properties
-          cat gradle.properties
+          tail -n +1 gradle.properties
 
       - name: Assemble Debug APK
         uses: gradle/gradle-build-action@v3
+        env:
+          JAVA_TOOL_OPTIONS: ""
+          _JAVA_OPTIONS: ""
+          GRADLE_OPTS: ""
+          BASE_URL: ${{ vars.BASE_URL != '' && vars.BASE_URL || secrets.BASE_URL }}
         with:
           arguments: |
             clean :app:assembleDebug
             -PBASE_URL=${{ env.BASE_URL }}
-            --stacktrace
+            --stacktrace --info
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
