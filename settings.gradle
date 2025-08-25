@@ -1,13 +1,18 @@
-rootProject.name = "ads2letter"
-include(":app")
+// settings.gradle (im Repo-Root)
 
 pluginManagement {
     repositories {
+        gradlePluginPortal()
         google()
         mavenCentral()
-        gradlePluginPortal()
+    }
+    // Versionen der Plugins hier definieren, damit sie im App-Gradle ohne Version benutzt werden können
+    plugins {
+        id("com.android.application") version "8.5.2"
+        id("org.jetbrains.kotlin.android") version "1.9.24"
     }
 }
+
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
@@ -15,3 +20,6 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
+
+rootProject.name = "ads2letter"
+include(":app")
