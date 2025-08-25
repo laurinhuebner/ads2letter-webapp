@@ -40,7 +40,7 @@ jobs:
           echo "kotlin.compiler.jvmTarget=17" >> gradle.properties
 
       - name: Build Debug APK (verbose)
-        run: ./gradlew clean assembleDebug -PBASE_URL="${BASE_URL}" --stacktrace --info
+        run: ./gradle clean assembleDebug -PBASE_URL="${BASE_URL}" --stacktrace --info
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
