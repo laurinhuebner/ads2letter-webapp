@@ -1,8 +1,15 @@
 name: Android APK
+
 on:
   workflow_dispatch:
   push:
     branches: [ main ]
+    paths:
+      - "app/**"
+      - "gradle/**"
+      - "build.gradle"
+      - "settings.gradle"
+      - ".github/workflows/android.yml"
 
 jobs:
   build:
@@ -12,57 +19,61 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: "17"
+          cache: gradle
 
-      # 1) Wrapper mit Gradle-Action erzeugen (kein Wrapper nötig)
-      - name: Generate Gradle Wrapper (8.7)
-        uses: gradle/gradle-build-action@v3
-        with:
-          gradle-version: 8.7
-          arguments: wrapper --gradle-version 8.7
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-      # 2) Wrapper fixen & ausführbar machen
-      - name: Prepare Wrapper
+      - name: Prepare Gradle (cache)
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Make gradlew executable (if present)
         run: |
-          test -f gradlew || { echo "gradlew fehlt"; exit 1; }
-          chmod +x gradlew
-          # Java-Opts-Zitatproblem entschärfen
-          sed -i 's/DEFAULT_JVM_OPTS=.*/DEFAULT_JVM_OPTS=""/' gradlew
+          if [ -f ./gradlew ]; then chmod +x ./gradlew; fi
 
-      - name: Print Gradle version
-        run: ./gradlew -v
+      - name: Gradle version
+        run: |
+          if [ -f ./gradlew ]; then
+            ./gradlew -v
+          else
+            echo "No gradlew found, using system Gradle"
+            gradle -v
+          fi
 
-      - name: Build debug APK (with logs)
-        env:
-          BASE_URL: http://192.168.1.21:5000
+      - name: Build Debug APK (with log)
         run: |
           set -o pipefail
-          ./gradlew clean :app:assembleDebug -PBASE_URL="${BASE_URL}" --stacktrace --info 2>&1 | tee gradle-run.log
+          if [ -f ./gradlew ]; then
+            ./gradlew clean :app:assembleDebug --stacktrace --no-daemon | tee build.log
+          else
+            gradle clean :app:assembleDebug --stacktrace --no-daemon | tee build.log
+          fi
 
-      - name: Show Kotlin compiler errors
+      - name: Show Kotlin errors (if build failed)
         if: failure()
         run: |
           echo "----- Kotlin errors -----"
-          grep -nE '^e: ' gradle-run.log || echo "Keine direkten e:-Zeilen gefunden."
-          find . -path "*/build/reports/problems/*" -type f -print || true
+          grep -n '^e: ' -n build.log || true
 
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
+          name: debug-apk
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Upload logs
+      - name: Upload build log (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-logs
-          path: |
-            gradle-run.log
-            **/build/reports/**
-          if-no-files-found: ignore
+          name: build-log
+          path: build.log
+          if-no-files-found: warn
+          retention-days: 7
