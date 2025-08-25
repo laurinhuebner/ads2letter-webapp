@@ -13,66 +13,60 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Java 17
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: 17
 
-      # Alle ggf. vererbten JAVA_OPTS deaktivieren
-      - name: Clear JAVA opts
-        run: |
-          echo "JAVA_TOOL_OPTIONS=" >> $GITHUB_ENV
-          echo "_JAVA_OPTIONS=" >> $GITHUB_ENV
+      - name: Set up Gradle (cache)
+        uses: gradle/actions/setup-gradle@v3
 
-      # gradle.properties hart setzen (OHNE Anführungszeichen!)
-      - name: Write gradle.properties
+      # Wrapper generieren, falls nicht vorhanden, und JVM-OPTS entschärfen
+      - name: Ensure Gradle Wrapper
         run: |
-          cat > gradle.properties <<'EOF'
-          org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
-          org.gradle.warning.mode=all
-          kotlin.compiler.execution.strategy=in-process
-          kotlin.incremental.verbose=true
-          android.useAndroidX=true
-          EOF
-          echo "=== gradle.properties ==="
-          cat gradle.properties
-
-      - name: Ensure Gradle wrapper
-        run: |
-          if [ ! -f ./gradlew ]; then
-            echo "Gradle Wrapper fehlt. Erzeuge Wrapper..."
-            mkdir -p gradle/wrapper
-            # Minimaler Wrapper (falls dein Repo keinen hat):
-            curl -sL https://raw.githubusercontent.com/gradle/gradle/master/gradle/wrapper/gradle-wrapper.properties -o gradle/wrapper/gradle-wrapper.properties || true
-            curl -sL https://raw.githubusercontent.com/gradle/gradle/master/gradlew -o gradlew
-            curl -sL https://raw.githubusercontent.com/gradle/gradle/master/gradlew.bat -o gradlew.bat
+          if [ ! -f gradlew ]; then
+            gradle wrapper --gradle-version 8.7
           fi
-          chmod +x ./gradlew
+          sed -i 's/DEFAULT_JVM_OPTS=.*/DEFAULT_JVM_OPTS=""/' gradlew
+          chmod +x gradlew
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Gradle -v
+      - name: Print Gradle version
         run: ./gradlew -v
 
-      - name: Build debug APK (with extra logs)
+      - name: Build debug APK (with logs)
+        env:
+          BASE_URL: http://192.168.1.21:5000
         run: |
           set -o pipefail
-          ./gradlew clean :app:assembleDebug --stacktrace --info --warning-mode all | tee build.log
+          ./gradlew clean :app:assembleDebug -PBASE_URL="${BASE_URL}" --stacktrace --info 2>&1 | tee gradle-run.log
 
-      - name: Upload APK
-        if: always()
+      # Bei Fehlschlag Kotlin-Fehler im Log direkt anzeigen
+      - name: Show Kotlin compiler errors (inline)
+        if: failure()
+        run: |
+          echo "------------ Kotlin errors (grep) ------------"
+          grep -nE '^e: ' gradle-run.log || echo "Keine direkten 'e:'-Zeilen gefunden."
+          echo "------------ Gradle Problems report -----------"
+          find . -path "*/build/reports/problems/*" -type f -print || true
+
+      # APK hochladen
+      - name: Upload APK artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: app-debug-apk
           path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: warn
 
-      - name: Upload build logs & reports
+      # Logs & Reports immer hochladen
+      - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-logs-and-reports
+          name: build-logs
           path: |
-            build.log
+            gradle-run.log
             **/build/reports/**
-            **/build/outputs/logs/**
-          if-no-files-found: warn
+            **/*.log
+          if-no-files-found: ignore
