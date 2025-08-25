@@ -4,72 +4,78 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
-    paths:
-      - 'app/**'
-      - 'build.gradle'
-      - 'build.gradle.kts'
-      - 'settings.gradle'
-      - 'settings.gradle.kts'
-      - 'gradle.properties'
-      - '.github/workflows/android.yml'
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
+    # Leere alle problematischen Java-Optionen GLOBAL
+    env:
+      JAVA_TOOL_OPTIONS: ""
+      _JAVA_OPTIONS: ""
+      GRADLE_OPTS: ""
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      # Gradle Wrapper erzeugen, falls fehlt
-      - name: Generate Gradle Wrapper if missing
-        if: ${{ hashFiles('gradlew') == '' }}
-        uses: gradle/gradle-build-action@v3
-        env:
-          JAVA_TOOL_OPTIONS: ""
-          _JAVA_OPTIONS: ""
-          GRADLE_OPTS: ""
-        with:
-          gradle-version: 8.7
-          arguments: wrapper
-
-      - name: Make gradlew executable & print version
+      # Gradle Wrapper erzeugen, falls nicht im Repo
+      - name: Ensure Gradle Wrapper
         shell: bash
         run: |
-          unset JAVA_TOOL_OPTIONS _JAVA_OPTIONS
-          if [ -f ./gradlew ]; then chmod +x ./gradlew; else echo "gradlew fehlt"; fi
+          set -e
+          if [ ! -f ./gradlew ]; then
+            echo "gradlew fehlt → lade Gradle 8.7 und erzeuge Wrapper"
+            curl -sL https://services.gradle.org/distributions/gradle-8.7-bin.zip -o gradle-8.7-bin.zip
+            unzip -q gradle-8.7-bin.zip
+            ./gradle-8.7/bin/gradle --version
+            ./gradle-8.7/bin/gradle wrapper
+          fi
+          chmod +x ./gradlew
           ./gradlew -v
 
-      - name: Ensure gradle.properties (AndroidX + RAM)
+      # gradle.properties reparieren/setzen (keine Anführungszeichen!)
+      - name: Normalize gradle.properties
         shell: bash
         run: |
-          unset JAVA_TOOL_OPTIONS _JAVA_OPTIONS
-          {
-            echo "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8"
-            echo "android.useAndroidX=true"
-            echo "android.enableJetifier=true"
-          } >> gradle.properties
-          tail -n +1 gradle.properties
+          set -e
+          # existierende gradle.properties bereinigen
+          touch gradle.properties
+          # entferne fehlerhafte Zeilen mit Anführungszeichen um Xmx64m
+          sed -i '/org\.gradle\.jvmargs=.*"-Xmx64m"/d' gradle.properties || true
+          # setze gewünschte Properties (überschreibt ggf. mehrfach vorhandene)
+          # Wichtig: KEINE Anführungszeichen um -Xmx
+          grep -q "^org.gradle.jvmargs=" gradle.properties && \
+            sed -i 's/^org\.gradle\.jvmargs=.*/org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8/' gradle.properties || \
+            echo "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8" >> gradle.properties
 
-      - name: Assemble Debug APK
-        uses: gradle/gradle-build-action@v3
-        env:
-          JAVA_TOOL_OPTIONS: ""
-          _JAVA_OPTIONS: ""
-          GRADLE_OPTS: ""
-          BASE_URL: ${{ vars.BASE_URL != '' && vars.BASE_URL || secrets.BASE_URL }}
-        with:
-          arguments: |
-            clean :app:assembleDebug
-            -PBASE_URL=${{ env.BASE_URL }}
-            --stacktrace --info
+          grep -q "^android.useAndroidX=" gradle.properties && \
+            sed -i 's/^android\.useAndroidX=.*/android.useAndroidX=true/' gradle.properties || \
+            echo "android.useAndroidX=true" >> gradle.properties
+
+          grep -q "^android.enableJetifier=" gradle.properties && \
+            sed -i 's/^android\.enableJetifier=.*/android.enableJetifier=true/' gradle.properties || \
+            echo "android.enableJetifier=true" >> gradle.properties
+
+          echo "----- gradle.properties -----"
+          cat gradle.properties
+          echo "-----------------------------"
+
+      # Optionale BASE_URL setzen (Repo → Settings → Secrets/Variables → Actions)
+      - name: Prepare env
+        shell: bash
+        run: |
+          : "${BASE_URL:=${{ vars.BASE_URL }}}"
+          : "${BASE_URL:=${{ secrets.BASE_URL }}}"
+          echo "BASE_URL=${BASE_URL}" >> $GITHUB_ENV
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          set -e
+          # zur Sicherheit auch hier alles leeren
+          unset JAVA_TOOL_OPTIONS _JAVA_OPTIONS
+          ./gradlew clean :app:assembleDebug -PBASE_URL="${BASE_URL}" --stacktrace --info
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
