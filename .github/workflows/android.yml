@@ -8,8 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    # Leere alle problematischen Java-Optionen GLOBAL
     env:
       JAVA_TOOL_OPTIONS: ""
       _JAVA_OPTIONS: ""
@@ -19,50 +17,68 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Gradle Wrapper erzeugen, falls nicht im Repo
+      - name: Show suspicious lines (optional)
+        shell: bash
+        run: |
+          git grep -n --color=never '"-Xmx64m"' || true
+          git grep -n --color=never 'org\.gradle\.jvmargs=' || true
+
       - name: Ensure Gradle Wrapper
         shell: bash
         run: |
           set -e
           if [ ! -f ./gradlew ]; then
-            echo "gradlew fehlt → lade Gradle 8.7 und erzeuge Wrapper"
             curl -sL https://services.gradle.org/distributions/gradle-8.7-bin.zip -o gradle-8.7-bin.zip
             unzip -q gradle-8.7-bin.zip
-            ./gradle-8.7/bin/gradle --version
             ./gradle-8.7/bin/gradle wrapper
           fi
           chmod +x ./gradlew
-          ./gradlew -v
 
-      # gradle.properties reparieren/setzen (keine Anführungszeichen!)
-      - name: Normalize gradle.properties
+      - name: Scrub ALL gradle.properties (project + user)
         shell: bash
         run: |
           set -e
-          # existierende gradle.properties bereinigen
+          # Projekt-root
           touch gradle.properties
-          # entferne fehlerhafte Zeilen mit Anführungszeichen um Xmx64m
-          sed -i '/org\.gradle\.jvmargs=.*"-Xmx64m"/d' gradle.properties || true
-          # setze gewünschte Properties (überschreibt ggf. mehrfach vorhandene)
-          # Wichtig: KEINE Anführungszeichen um -Xmx
-          grep -q "^org.gradle.jvmargs=" gradle.properties && \
-            sed -i 's/^org\.gradle\.jvmargs=.*/org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8/' gradle.properties || \
-            echo "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8" >> gradle.properties
+          # Alle project-gradle.properties finden & bereinigen
+          while IFS= read -r f; do
+            echo "Fixing $f"
+            # entferne Zeilen mit falsch zitierten Werten
+            sed -i '/org\.gradle\.jvmargs=.*"-Xmx64m"/d' "$f" || true
+            # setze korrekte Werte (ohne Anführungszeichen!)
+            if grep -q '^org\.gradle\.jvmargs=' "$f"; then
+              sed -i 's/^org\.gradle\.jvmargs=.*/org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8/' "$f"
+            else
+              echo 'org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8' >> "$f"
+            fi
+            if grep -q '^android\.useAndroidX=' "$f"; then
+              sed -i 's/^android\.useAndroidX=.*/android.useAndroidX=true/' "$f"
+            else
+              echo 'android.useAndroidX=true' >> "$f"
+            fi
+            if grep -q '^android\.enableJetifier=' "$f"; then
+              sed -i 's/^android\.enableJetifier=.*/android.enableJetifier=true/' "$f"
+            else
+              echo 'android.enableJetifier=true' >> "$f"
+            fi
+          done < <(find . -name gradle.properties)
 
-          grep -q "^android.useAndroidX=" gradle.properties && \
-            sed -i 's/^android\.useAndroidX=.*/android.useAndroidX=true/' gradle.properties || \
-            echo "android.useAndroidX=true" >> gradle.properties
+          # User-Gradle (falls der Runner so etwas gesetzt hat)
+          mkdir -p ~/.gradle
+          cat > ~/.gradle/gradle.properties <<'EOF'
+org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
+android.useAndroidX=true
+android.enableJetifier=true
+EOF
 
-          grep -q "^android.enableJetifier=" gradle.properties && \
-            sed -i 's/^android\.enableJetifier=.*/android.enableJetifier=true/' gradle.properties || \
-            echo "android.enableJetifier=true" >> gradle.properties
+          echo "----- EFFECTIVE project gradle.properties -----"
+          cat gradle.properties || true
+          echo "----------------------------------------------"
+          echo "----- USER ~/.gradle/gradle.properties  ------"
+          cat ~/.gradle/gradle.properties || true
+          echo "----------------------------------------------"
 
-          echo "----- gradle.properties -----"
-          cat gradle.properties
-          echo "-----------------------------"
-
-      # Optionale BASE_URL setzen (Repo → Settings → Secrets/Variables → Actions)
-      - name: Prepare env
+      - name: Prepare env (BASE_URL optional)
         shell: bash
         run: |
           : "${BASE_URL:=${{ vars.BASE_URL }}}"
@@ -73,9 +89,9 @@ jobs:
         shell: bash
         run: |
           set -e
-          # zur Sicherheit auch hier alles leeren
-          unset JAVA_TOOL_OPTIONS _JAVA_OPTIONS
-          ./gradlew clean :app:assembleDebug -PBASE_URL="${BASE_URL}" --stacktrace --info
+          unset JAVA_TOOL_OPTIONS _JAVA_OPTIONS GRADLE_OPTS
+          ./gradlew --no-daemon --version
+          ./gradlew clean :app:assembleDebug -PBASE_URL="${BASE_URL}" --no-daemon --stacktrace --info
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
