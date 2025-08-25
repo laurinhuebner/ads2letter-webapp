@@ -17,12 +17,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      # neutralisiert evtl. vorkonfigurierte Runner-Optionen, die den "-Xmx64m"-Fehler auslösen
       JAVA_TOOL_OPTIONS: ""
       _JAVA_OPTIONS: ""
       GRADLE_OPTS: ""
-      # BASE_URL aus GitHub Variables oder Secrets (lege eins von beiden an)
       BASE_URL: ${{ vars.BASE_URL != '' && vars.BASE_URL || secrets.BASE_URL }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,12 +33,12 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      - name: Setup Gradle (action v3)
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      # Falls gradle wrapper fehlt, wird er hier erzeugt (mit Gradle 8.7)
+      # Wrapper generieren, falls er fehlt
       - name: Generate Gradle Wrapper if missing
-        if: ${{ !exists('gradlew') }}
+        if: ${{ hashFiles('gradlew') == '' }}
         uses: gradle/gradle-build-action@v3
         with:
           gradle-version: 8.7
@@ -47,12 +46,12 @@ jobs:
 
       - name: Make gradlew executable
         run: |
-          chmod +x ./gradlew
+          if [ -f ./gradlew ]; then chmod +x ./gradlew; fi
           ./gradlew -v
 
-      - name: Write/merge gradle.properties (AndroidX + RAM)
+      - name: Ensure gradle.properties (AndroidX + RAM)
         run: |
-          { 
+          {
             echo "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8";
             echo "android.useAndroidX=true";
             echo "android.enableJetifier=true";
