@@ -1,45 +1,61 @@
 name: Android APK
+
 on:
-  push:
-    branches: [ "main" ]
   workflow_dispatch:
+  push:
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: 17
 
-      - name: Sanitize env (prevents Java arg injection)
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      # Optional, hilfreich für AGP/SDK-Tools
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Ensure gradle.properties in workspace
         run: |
-          echo "JAVA_TOOL_OPTIONS=" >> $GITHUB_ENV
-          echo "_JAVA_OPTIONS=" >> $GITHUB_ENV
-          echo "JAVA_OPTS=" >> $GITHUB_ENV
-          echo "GRADLE_OPTS=" >> $GITHUB_ENV
+          echo "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8" >> gradle.properties
+          echo "android.useAndroidX=true" >> gradle.properties
 
-      - name: Write gradle.properties (root)
+      - name: Gradle Version
+        run: gradle --version
+
+      - name: Compile Kotlin (full log)
+        id: compile
         run: |
-          printf '%s\n' \
-            'org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8' \
-            'android.useAndroidX=true' \
-            'android.enableJetifier=true' > gradle.properties
-          cat gradle.properties
+          mkdir -p build-logs
+          gradle :app:compileDebugKotlin --stacktrace --info --warning-mode all --console=plain | tee build-logs/compileDebugKotlin.log
 
-      - name: Build with Gradle (no wrapper)
-        uses: gradle/gradle-build-action@v3
-        with:
-          gradle-version: 8.7
-          arguments: clean :app:assembleDebug --stacktrace --info
-
-      - name: Upload APK
+      - name: Upload compile logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: compile-logs
+          path: |
+            build-logs/*.log
+            app/build/reports/problems/**
+
+      - name: Build Debug APK
+        if: steps.compile.outcome == 'success'
+        run: gradle clean :app:assembleDebug --stacktrace --info --warning-mode all --console=plain
+
+      - name: Upload APK
+        if: steps.compile.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/*.apk
