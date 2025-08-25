@@ -9,43 +9,41 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        distribution: temurin
-        java-version: '17'
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
-    - name: Clear JVM env that breaks Java
-      run: |
-        echo "JAVA_TOOL_OPTIONS=" >> $GITHUB_ENV
-        echo "_JAVA_OPTIONS=" >> $GITHUB_ENV
-        echo "JAVA_OPTS=" >> $GITHUB_ENV
-        echo "GRADLE_OPTS=" >> $GITHUB_ENV
+      - name: Clear JVM env that can break Java
+        run: |
+          echo "JAVA_TOOL_OPTIONS=" >> $GITHUB_ENV
+          echo "_JAVA_OPTIONS=" >> $GITHUB_ENV
+          echo "JAVA_OPTS=" >> $GITHUB_ENV
+          echo "GRADLE_OPTS=" >> $GITHUB_ENV
 
-    - name: Ensure gradlew is executable
-      run: chmod +x ./gradlew
+      - name: Ensure gradlew is executable
+        run: chmod +x ./gradlew
 
-    - name: Write clean gradle.properties
-      run: |
-        cat > gradle.properties <<'EOF'
-org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
-android.useAndroidX=true
-android.enableJetifier=true
-EOF
-        echo "=== gradle.properties ==="
-        cat gradle.properties
+      - name: Write gradle.properties (root)
+        run: |
+          printf '%s\n' \
+            'org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8' \
+            'android.useAndroidX=true' \
+            'android.enableJetifier=true' > gradle.properties
+          cat gradle.properties
 
-    - name: Show Gradle version
-      run: ./gradlew -v
+      - name: Show Gradle version
+        run: ./gradlew -v
 
-    - name: Build debug APK
-      run: ./gradlew clean :app:assembleDebug --stacktrace --info
+      - name: Build debug APK
+        run: ./gradlew clean :app:assembleDebug --stacktrace --info
 
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: android-apk
-        path: app/build/outputs/apk/debug/app-debug.apk
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
