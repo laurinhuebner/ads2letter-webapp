@@ -1,5 +1,5 @@
 name: Build Debug APK
-  run: |
+run: |
     ./gradlew assembleDebug -PBASE_URL="${BASE_URL}" --stacktrace --info
 on:
   push:
