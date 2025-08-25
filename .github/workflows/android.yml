@@ -1,5 +1,4 @@
 name: Android APK
-
 on:
   push:
     branches: [ "main" ]
@@ -18,15 +17,12 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Clear JVM env that can break Java
+      - name: Sanitize env (prevents Java arg injection)
         run: |
           echo "JAVA_TOOL_OPTIONS=" >> $GITHUB_ENV
           echo "_JAVA_OPTIONS=" >> $GITHUB_ENV
           echo "JAVA_OPTS=" >> $GITHUB_ENV
           echo "GRADLE_OPTS=" >> $GITHUB_ENV
-
-      - name: Ensure gradlew is executable
-        run: chmod +x ./gradlew
 
       - name: Write gradle.properties (root)
         run: |
@@ -36,11 +32,11 @@ jobs:
             'android.enableJetifier=true' > gradle.properties
           cat gradle.properties
 
-      - name: Show Gradle version
-        run: ./gradlew -v
-
-      - name: Build debug APK
-        run: ./gradlew clean :app:assembleDebug --stacktrace --info
+      - name: Build with Gradle (no wrapper)
+        uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: 8.7
+          arguments: clean :app:assembleDebug --stacktrace --info
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
