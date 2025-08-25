@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace 'com.example.webviewapp'
+    namespace 'de.laurin.ads2letter'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.example.webviewapp"
+        applicationId "de.laurin.ads2letter"
         minSdk 24
         targetSdk 34
         versionCode 1
