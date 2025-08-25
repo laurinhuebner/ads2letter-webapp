@@ -1,124 +1,47 @@
-package com.example.ads2letter
+package com.example.webviewapp
 
-import android.app.Activity
-import android.content.Intent
-import android.graphics.pdf.PdfRenderer
-import android.net.Uri
+import android.annotation.SuppressLint
 import android.os.Bundle
-import android.os.ParcelFileDescriptor
-import android.widget.Button
-import android.widget.ImageView
-import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.logging.HttpLoggingInterceptor
-import java.io.File
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.activity.ComponentActivity
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : ComponentActivity() {
 
-    private lateinit var selectPdfButton: Button
-    private lateinit var pdfPreview: ImageView
-    private lateinit var resultText: TextView
+    private lateinit var webView: WebView
 
-    private val PICK_PDF_FILE = 1001
-
-    // OkHttp mit Logging
-    private val client: OkHttpClient by lazy {
-        val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
-        }
-        OkHttpClient.Builder()
-            .addInterceptor(logging)
-            .build()
-    }
-
+    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        selectPdfButton = findViewById(R.id.selectPdfButton)
-        pdfPreview = findViewById(R.id.pdfPreview)
-        resultText = findViewById(R.id.resultText)
+        webView = findViewById(R.id.webview)
 
-        selectPdfButton.setOnClickListener {
-            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "application/pdf"
-            }
-            startActivityForResult(intent, PICK_PDF_FILE)
-        }
-    }
+        val settings: WebSettings = webView.settings
+        settings.javaScriptEnabled = true
+        settings.domStorageEnabled = true
+        settings.allowFileAccess = true
+        settings.useWideViewPort = true
+        settings.loadWithOverviewMode = true
+        settings.cacheMode = WebSettings.LOAD_DEFAULT
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-
-        if (requestCode == PICK_PDF_FILE && resultCode == Activity.RESULT_OK) {
-            data?.data?.let { uri ->
-                renderPdf(uri)
-                uploadPdf(uri)
+        webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
+                view.loadUrl(url)
+                return true
             }
         }
+
+        // LAN-Server
+        webView.loadUrl("http://192.168.1.21:5000/")
     }
 
-    private fun renderPdf(uri: Uri) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            val file = copyToCache(uri)
-            val fileDescriptor = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-            val renderer = PdfRenderer(fileDescriptor)
-            val page = renderer.openPage(0)
-
-            val bitmap = android.graphics.Bitmap.createBitmap(
-                page.width, page.height,
-                android.graphics.Bitmap.Config.ARGB_8888
-            )
-            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-            page.close()
-            renderer.close()
-
-            withContext(Dispatchers.Main) {
-                pdfPreview.setImageBitmap(bitmap)
-            }
+    override fun onBackPressed() {
+        if (::webView.isInitialized && webView.canGoBack()) {
+            webView.goBack()
+        } else {
+            super.onBackPressed()
         }
-    }
-
-    private fun uploadPdf(uri: Uri) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            val file = copyToCache(uri)
-
-            val request = Request.Builder()
-                .url(BuildConfig.BASE_URL + "/upload")
-                .post(okhttp3.RequestBody.create(
-                    okhttp3.MediaType.parse("application/pdf"),
-                    file
-                ))
-                .build()
-
-            try {
-                val response = client.newCall(request).execute()
-                val body = response.body()?.string() ?: "Fehler: Leere Antwort"
-
-                withContext(Dispatchers.Main) {
-                    resultText.text = body
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    resultText.text = "Fehler: ${e.localizedMessage}"
-                }
-            }
-        }
-    }
-
-    private fun copyToCache(uri: Uri): File {
-        val inputStream = contentResolver.openInputStream(uri)
-        val file = File(cacheDir, "temp.pdf")
-        inputStream?.use { input ->
-            file.outputStream().use { output -> input.copyTo(output) }
-        }
-        return file
     }
 }
