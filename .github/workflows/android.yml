@@ -23,33 +23,71 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Ensure Gradle wrapper (generate if missing)
+      - name: Locate Android project dir
+        id: locate
+        shell: bash
         run: |
+          set -e
+          # finde settings.gradle/.kts
+          FILE=$(git ls-files | grep -m1 -E 'settings\.gradle(\.kts)?$' || true)
+          if [ -z "$FILE" ]; then
+            echo "Kein settings.gradle gefunden – liegt dein Android-Projekt im Repo?" >&2
+            exit 1
+          fi
+          DIR=$(dirname "$FILE")
+          echo "project_dir=$DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure Gradle wrapper or fallback Gradle
+        id: wrapper
+        shell: bash
+        run: |
+          set -e
+          cd "${{ steps.locate.outputs.project_dir }}"
           sudo apt-get update && sudo apt-get install -y unzip
-          if [ ! -f gradlew ]; then
+          # wenn kein Wrapper: Gradle laden und Wrapper generieren
+          if [ ! -f ./gradlew ]; then
+            echo "gradlew fehlt – lade Gradle 8.7 und generiere Wrapper…"
             curl -sL https://services.gradle.org/distributions/gradle-8.7-bin.zip -o gradle.zip
             unzip -q gradle.zip
-            ./gradle-8.7/bin/gradle wrapper
+            ./gradle-8.7/bin/gradle wrapper --gradle-version 8.7
           fi
-          dos2unix gradlew 2>/dev/null || true
-          chmod +x gradlew
-          # Entfernt fehlerhafte JVM-Opts wie "-Xmx64m" im Wrapper
-          sed -i 's/^DEFAULT_JVM_OPTS=.*/DEFAULT_JVM_OPTS=""/' gradlew || true
+          # Wrapper reparieren + ausführbar machen
+          if [ -f ./gradlew ]; then
+            dos2unix gradlew 2>/dev/null || true
+            chmod +x gradlew
+            # Leere JVM-OPTS, um "-Xmx64m"-Fehler zu vermeiden
+            sed -i 's/^DEFAULT_JVM_OPTS=.*/DEFAULT_JVM_OPTS=""/' gradlew || true
+          fi
+
+          # Entscheide Befehlszeile (Wrapper oder Fallback)
+          if [ -f ./gradlew ] && [ -f gradle/wrapper/gradle-wrapper.jar ]; then
+            echo "cmd=./gradlew" >> "$GITHUB_OUTPUT"
+          else
+            echo "Wrapper nicht vollständig – nutze Fallback Gradle."
+            [ -d gradle-8.7 ] || (curl -sL https://services.gradle.org/distributions/gradle-8.7-bin.zip -o gradle.zip && unzip -q gradle.zip)
+            echo "cmd=./gradle-8.7/bin/gradle" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Create/override gradle.properties
+        shell: bash
+        working-directory: ${{ steps.locate.outputs.project_dir }}
         run: |
           printf "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8\nandroid.useAndroidX=true\nandroid.enableJetifier=true\n" > gradle.properties
           cat gradle.properties
 
       - name: Show Gradle version
-        run: ./gradlew --no-daemon -v
+        shell: bash
+        working-directory: ${{ steps.locate.outputs.project_dir }}
+        run: ${{ steps.wrapper.outputs.cmd }} --no-daemon -v
 
       - name: Build debug APK
-        run: ./gradlew clean :app:assembleDebug --no-daemon --stacktrace --info
+        shell: bash
+        working-directory: ${{ steps.locate.outputs.project_dir }}
+        run: ${{ steps.wrapper.outputs.cmd }} clean :app:assembleDebug --no-daemon --stacktrace --info
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
-          path: app/build/outputs/apk/debug/*.apk
+          path: ${{ steps.locate.outputs.project_dir }}/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
