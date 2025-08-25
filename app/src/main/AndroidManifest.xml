@@ -4,7 +4,7 @@
     <uses-permission android:name="android.permission.INTERNET"/>
 
     <application
-        android:label="WebView App"
+        android:label="Ads2Letter"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
         <activity
