@@ -1,5 +1,4 @@
 name: Android APK
-
 on:
   workflow_dispatch:
   push:
@@ -19,18 +18,20 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Set up Gradle (cache)
-        uses: gradle/actions/setup-gradle@v3
+      # 1) Wrapper mit Gradle-Action erzeugen (kein Wrapper nötig)
+      - name: Generate Gradle Wrapper (8.7)
+        uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: 8.7
+          arguments: wrapper --gradle-version 8.7
 
-      # Wrapper generieren, falls nicht vorhanden, und JVM-OPTS entschärfen
-      - name: Ensure Gradle Wrapper
+      # 2) Wrapper fixen & ausführbar machen
+      - name: Prepare Wrapper
         run: |
-          if [ ! -f gradlew ]; then
-            gradle wrapper --gradle-version 8.7
-          fi
-          sed -i 's/DEFAULT_JVM_OPTS=.*/DEFAULT_JVM_OPTS=""/' gradlew
+          test -f gradlew || { echo "gradlew fehlt"; exit 1; }
           chmod +x gradlew
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          # Java-Opts-Zitatproblem entschärfen
+          sed -i 's/DEFAULT_JVM_OPTS=.*/DEFAULT_JVM_OPTS=""/' gradlew
 
       - name: Print Gradle version
         run: ./gradlew -v
@@ -42,24 +43,20 @@ jobs:
           set -o pipefail
           ./gradlew clean :app:assembleDebug -PBASE_URL="${BASE_URL}" --stacktrace --info 2>&1 | tee gradle-run.log
 
-      # Bei Fehlschlag Kotlin-Fehler im Log direkt anzeigen
-      - name: Show Kotlin compiler errors (inline)
+      - name: Show Kotlin compiler errors
         if: failure()
         run: |
-          echo "------------ Kotlin errors (grep) ------------"
-          grep -nE '^e: ' gradle-run.log || echo "Keine direkten 'e:'-Zeilen gefunden."
-          echo "------------ Gradle Problems report -----------"
+          echo "----- Kotlin errors -----"
+          grep -nE '^e: ' gradle-run.log || echo "Keine direkten e:-Zeilen gefunden."
           find . -path "*/build/reports/problems/*" -type f -print || true
 
-      # APK hochladen
-      - name: Upload APK artifact
+      - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: app-debug-apk
           path: app/build/outputs/apk/debug/*.apk
 
-      # Logs & Reports immer hochladen
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -68,5 +65,4 @@ jobs:
           path: |
             gradle-run.log
             **/build/reports/**
-            **/*.log
           if-no-files-found: ignore
