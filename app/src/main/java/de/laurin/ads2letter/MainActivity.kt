@@ -1,4 +1,4 @@
-package com.example.webviewapp
+package de.laurin.ads2letter
 
 import android.annotation.SuppressLint
 import android.os.Bundle
